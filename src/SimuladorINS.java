@@ -5,8 +5,9 @@ import java.awt.*;
 
 public class SimuladorINS extends JFrame {
 
-    // Componentes de entrada
+    // Controles de entrada
     private JSpinner spinTiempo;
+    private JSpinner spinLongitudTunel;
     private JSpinner spinErrorAccel;
     private JSpinner spinErrorGyro;
 
@@ -14,6 +15,7 @@ public class SimuladorINS extends JFrame {
     private JLabel lblTheta;
     private JLabel lblVelocidad;
     private JLabel lblPosicion;
+    private JLabel lblEstadoTunel;
     private JLabel lblVprom;
     private JLabel lblSensibilidadAccel;
     private JLabel lblSensibilidadGyro;
@@ -24,7 +26,7 @@ public class SimuladorINS extends JFrame {
     public SimuladorINS() {
         super("Simulador de Navegación Inercial (INS) - Cálculo II / Ing. en Sistemas");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(1150, 780);
+        setSize(1180, 800);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout(10, 10));
 
@@ -42,7 +44,7 @@ public class SimuladorINS extends JFrame {
         titulo.setFont(new Font("Segoe UI", Font.BOLD, 17));
         titulo.setForeground(Color.WHITE);
 
-        JLabel subtitulo = new JLabel("Pérdida de GPS en Túnel (150 m) | Doble Integración, Valor Promedio y Análisis de Error");
+        JLabel subtitulo = new JLabel("Simulación de Pérdida de GPS en Túnel | Doble Integración, Valor Promedio y Sensibilidad");
         subtitulo.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         subtitulo.setForeground(new Color(175, 190, 210));
 
@@ -53,19 +55,23 @@ public class SimuladorINS extends JFrame {
         // --- PANEL LATERAL IZQUIERDO: CONTROLES Y RESULTADOS ---
         JPanel panelIzquierdo = new JPanel();
         panelIzquierdo.setLayout(new BoxLayout(panelIzquierdo, BoxLayout.Y_AXIS));
-        panelIzquierdo.setPreferredSize(new Dimension(340, 0));
+        panelIzquierdo.setPreferredSize(new Dimension(350, 0));
         panelIzquierdo.setBorder(new EmptyBorder(10, 12, 10, 6));
 
         // 1. Grupo de Parámetros de Entrada
-        JPanel panelInputs = new JPanel(new GridLayout(3, 2, 8, 8));
+        JPanel panelInputs = new JPanel(new GridLayout(4, 2, 8, 8));
         panelInputs.setBorder(crearBordeSeccion("Parámetros de Simulación"));
 
         panelInputs.add(new JLabel("Tiempo t (s):"));
         spinTiempo = new JSpinner(new SpinnerNumberModel(5.0, 1.0, 30.0, 0.5));
         panelInputs.add(spinTiempo);
 
+        panelInputs.add(new JLabel("Long. Túnel (m):"));
+        spinLongitudTunel = new JSpinner(new SpinnerNumberModel(150.0, 10.0, 1000.0, 10.0));
+        panelInputs.add(spinLongitudTunel);
+
         panelInputs.add(new JLabel("Error Acel. da (m/s²):"));
-        spinErrorAccel = new JSpinner(new SpinnerNumberModel(2.0, 0.0, 5.0, 0.1));
+        spinErrorAccel = new JSpinner(new SpinnerNumberModel(2.0, 0.0, 10.0, 0.1));
         panelInputs.add(spinErrorAccel);
 
         panelInputs.add(new JLabel("Error Girosc. dθ (rad):"));
@@ -84,26 +90,28 @@ public class SimuladorINS extends JFrame {
         btnCalcular.setFont(new Font("Segoe UI", Font.BOLD, 12));
         btnCalcular.addActionListener(e -> calcularYActualizar());
         panelIzquierdo.add(btnCalcular);
-        panelIzquierdo.add(Box.createVerticalStrut(14));
+        panelIzquierdo.add(Box.createVerticalStrut(12));
 
         // 2. Grupo de Resultados Analíticos
-        JPanel panelResultados = new JPanel(new GridLayout(4, 1, 6, 6));
-        panelResultados.setBorder(crearBordeSeccion("Resultados Analíticos"));
+        JPanel panelResultados = new JPanel(new GridLayout(5, 1, 6, 6));
+        panelResultados.setBorder(crearBordeSeccion("Resultados Cinemáticos"));
 
         lblTheta = new JLabel("θ(t): -");
         lblVelocidad = new JLabel("v(t): -");
         lblPosicion = new JLabel("s(t): -");
+        lblEstadoTunel = new JLabel("Estado: -");
         lblVprom = new JLabel("Vprom [0, t]: -");
 
         panelResultados.add(lblTheta);
         panelResultados.add(lblVelocidad);
         panelResultados.add(lblPosicion);
+        panelResultados.add(lblEstadoTunel);
         panelResultados.add(lblVprom);
 
         panelIzquierdo.add(panelResultados);
-        panelIzquierdo.add(Box.createVerticalStrut(14));
+        panelIzquierdo.add(Box.createVerticalStrut(12));
 
-        // 3. Grupo de Derivadas Parciales y Deriva
+        // 3. Grupo de Derivadas Parciales y Análisis de Error
         JPanel panelError = new JPanel(new GridLayout(2, 1, 6, 6));
         panelError.setBorder(crearBordeSeccion("Análisis de Derivadas Parciales"));
 
@@ -133,6 +141,7 @@ public class SimuladorINS extends JFrame {
 
     private void calcularYActualizar() {
         double t = ((Number) spinTiempo.getValue()).doubleValue();
+        double lTunel = ((Number) spinLongitudTunel.getValue()).doubleValue();
         double da = ((Number) spinErrorAccel.getValue()).doubleValue();
         double dtheta = ((Number) spinErrorGyro.getValue()).doubleValue();
 
@@ -150,42 +159,55 @@ public class SimuladorINS extends JFrame {
         // 4. Valor Promedio: V_prom = (s(t) - s(0)) / t
         double vProm = s / t;
 
-        // 5. Derivadas Parciales (Sensibilidad de error)
+        // 5. Análisis de Derivadas Parciales
         double sensAccel = 0.5 * Math.pow(t, 2);
         double errorPosAccel = sensAccel * da;
 
         double sensGyro = 0.5 * vProm * Math.pow(t, 2);
         double errorPosGyro = sensGyro * dtheta;
 
+        // 6. Evaluación de Salida del Túnel
+        double porcentaje = Math.min(100.0, (s / lTunel) * 100.0);
+        String estadoHtml;
+        if (s >= lTunel) {
+            estadoHtml = "<html><b>Estado:</b> <font color='#16a34a'><b>¡Túnel Completado! (GPS Recuperado)</b></font></html>";
+        } else {
+            double restante = lTunel - s;
+            estadoHtml = String.format("<html><b>Estado:</b> <font color='#d97706'>En Túnel (Faltan %.1fm | %.0f%%)</font></html>", restante, porcentaje);
+        }
+
         // Actualizar etiquetas
         lblTheta.setText(String.format("<html><b>Orientación θ:</b> %.4f rad (%.2f°)</html>", thetaRad, thetaDeg));
         lblVelocidad.setText(String.format("<html><b>Velocidad v:</b> %.3f m/s</html>", v));
-        lblPosicion.setText(String.format("<html><b>Posición s:</b> %.3f m</html>", s));
+        lblPosicion.setText(String.format("<html><b>Posición s:</b> %.3f m / %.0f m</html>", s, lTunel));
+        lblEstadoTunel.setText(estadoHtml);
         lblVprom.setText(String.format("<html><b>Velocidad Media:</b> %.3f m/s</html>", vProm));
 
         lblSensibilidadAccel.setText(String.format("<html><b>∂E/∂εa:</b> %.2f s² &rarr; Desvío: <b>%.2f m</b></html>", sensAccel, errorPosAccel));
         lblSensibilidadGyro.setText(String.format("<html><b>∂E/∂εθ:</b> %.2f m/rad &rarr; Desvío: <b>%.2f m</b></html>", sensGyro, errorPosGyro));
 
         // Actualizar gráficas
-        panelGraficas.actualizarDatos(t, vProm, da);
+        panelGraficas.actualizarDatos(t, vProm, da, lTunel);
     }
 
     // =========================================================================
-    // PANEL GRÁFICO PROFESIONAL CON MÁRGENES Y LEYENDAS INDEPENDIENTES
+    // PANEL GRÁFICO CON LEYENDAS EXTERNAS Y ÁREA DE DATOS 100% DESPEJADA
     // =========================================================================
     private static class PanelGraficas extends JPanel {
         private double tMax = 5.0;
         private double vProm = 13.375;
         private double errorAccel = 2.0;
+        private double lTunel = 150.0;
 
         public PanelGraficas() {
             setBackground(new Color(250, 252, 255));
         }
 
-        public void actualizarDatos(double tMax, double vProm, double errorAccel) {
+        public void actualizarDatos(double tMax, double vProm, double errorAccel, double lTunel) {
             this.tMax = tMax;
             this.vProm = vProm;
             this.errorAccel = errorAccel;
+            this.lTunel = lTunel;
             repaint();
         }
 
@@ -203,15 +225,15 @@ public class SimuladorINS extends JFrame {
             // Gráfica 1: Velocidad
             dibujarGraficaVelocidad(g2, 10, 10, panelW - 20, chartH);
 
-            // Gráfica 2: Posición y Deriva
+            // Gráfica 2: Posición, Túnel y Deriva
             dibujarGraficaPosicion(g2, 10, 25 + chartH, panelW - 20, chartH);
         }
 
         private void dibujarGraficaVelocidad(Graphics2D g2, int x, int y, int w, int h) {
             int padLeft = 60;
             int padRight = 30;
-            int padTop = 32;
-            int padBottom = 32;
+            int padTop = 42; // Espacio superior suficiente para título y leyenda
+            int padBottom = 30;
 
             int plotX = x + padLeft;
             int plotY = y + padTop;
@@ -221,11 +243,22 @@ public class SimuladorINS extends JFrame {
             double yMin = 0.0;
             double yMax = 20.0;
 
-            dibujarMarcoYCuadricula(g2, plotX, plotY, plotW, plotH,
-                    "Perfil de Velocidad v(t) y Teorema del Valor Promedio",
-                    "Velocidad (m/s)", yMin, yMax, tMax);
+            // 1. Título y Leyenda fuera del recuadro
+            g2.setColor(new Color(30, 40, 55));
+            g2.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            g2.drawString("Perfil de Velocidad v(t) y Teorema del Valor Promedio", plotX, y + 24);
 
-            // Generar puntos de v(t)
+            String[] lineas = {
+                    "v(t) Teórica",
+                    String.format("Vprom = %.3f m/s", vProm)
+            };
+            Color[] colores = { new Color(20, 115, 215), new Color(225, 110, 20) };
+            boolean[] punteadas = { false, true };
+            dibujarLeyendaHorizontal(g2, plotX + plotW, y + 8, lineas, colores, punteadas);
+
+            // 2. Gráfico y Cuadrícula
+            dibujarMarcoYCuadricula(g2, plotX, plotY, plotW, plotH, "m/s", yMin, yMax, tMax);
+
             int numPuntos = 200;
             int[] px = new int[numPuntos];
             int[] py = new int[numPuntos];
@@ -239,7 +272,6 @@ public class SimuladorINS extends JFrame {
                 py[i] = plotY + plotH - (int) (((v - yMin) / (yMax - yMin)) * plotH);
             }
 
-            // Aplicar clip para no dibujar fuera del área del gráfico
             Shape clipOriginal = g2.getClip();
             g2.clipRect(plotX, plotY, plotW, plotH);
 
@@ -255,38 +287,43 @@ public class SimuladorINS extends JFrame {
             g2.drawPolyline(px, py, numPuntos);
 
             g2.setClip(clipOriginal);
-
-            // Caja de Leyenda aislada (esquina superior derecha, sin estorbar la curva)
-            String[] lineas = {
-                    "v(t) = 5te^{-0.1t} + 50e^{-0.1t} - 35",
-                    String.format("Vprom = %.3f m/s", vProm)
-            };
-            Color[] colores = { new Color(20, 115, 215), new Color(225, 110, 20) };
-            boolean[] punteadas = { false, true };
-            dibujarCajaLeyenda(g2, plotX + plotW - 250, plotY + 8, 240, lineas, colores, punteadas);
         }
 
         private void dibujarGraficaPosicion(Graphics2D g2, int x, int y, int w, int h) {
             int padLeft = 60;
             int padRight = 30;
-            int padTop = 32;
-            int padBottom = 32;
+            int padTop = 42;
+            int padBottom = 30;
 
             int plotX = x + padLeft;
             int plotY = y + padTop;
             int plotW = w - padLeft - padRight;
             int plotH = h - padTop - padBottom;
 
-            // Escala Y dinámica según el tiempo y el error acumulado
+            // Escala adaptativa
             double expT = Math.exp(-0.1 * tMax);
             double sTeoricaMax = -50.0 * tMax * expT - 1000.0 * expT - 35.0 * tMax + 1000.0;
             double sErrorMax = sTeoricaMax + 0.5 * errorAccel * Math.pow(tMax, 2);
             double yMin = 0.0;
-            double yMax = Math.max(80.0, Math.ceil(sErrorMax * 1.15 / 10.0) * 10.0);
+            double mayorDistancia = Math.max(lTunel, Math.max(sTeoricaMax, sErrorMax));
+            double yMax = Math.max(100.0, Math.ceil((mayorDistancia * 1.15) / 20.0) * 20.0);
 
-            dibujarMarcoYCuadricula(g2, plotX, plotY, plotW, plotH,
-                    "Desplazamiento s(t) y Deriva Inercial Acumulada",
-                    "Posición (m)", yMin, yMax, tMax);
+            // 1. Título y Leyenda fuera del recuadro
+            g2.setColor(new Color(30, 40, 55));
+            g2.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            g2.drawString("Desplazamiento s(t) y Deriva Inercial Acumulada", plotX, y + 24);
+
+            String[] lineas = {
+                    "s(t) Teórica",
+                    String.format("Túnel (%.0f m)", lTunel),
+                    String.format("Con Deriva (da=%.1f)", errorAccel)
+            };
+            Color[] colores = { new Color(30, 150, 60), new Color(220, 38, 38), new Color(155, 40, 160) };
+            boolean[] punteadas = { false, true, true };
+            dibujarLeyendaHorizontal(g2, plotX + plotW, y + 8, lineas, colores, punteadas);
+
+            // 2. Gráfico y Cuadrícula
+            dibujarMarcoYCuadricula(g2, plotX, plotY, plotW, plotH, "metros", yMin, yMax, tMax);
 
             int numPuntos = 200;
             int[] px = new int[numPuntos];
@@ -307,13 +344,23 @@ public class SimuladorINS extends JFrame {
             Shape clipOriginal = g2.getClip();
             g2.clipRect(plotX, plotY, plotW, plotH);
 
-            // Sombra de área de deriva acumulada
+            // Sombra del área de deriva inercial
             Polygon areaDeriva = new Polygon();
             for (int i = 0; i < numPuntos; i++) areaDeriva.addPoint(px[i], pyTeorico[i]);
             for (int i = numPuntos - 1; i >= 0; i--) areaDeriva.addPoint(px[i], pyError[i]);
 
             g2.setColor(new Color(155, 60, 180, 45));
             g2.fill(areaDeriva);
+
+            // Línea horizontal límite del túnel (totalmente visible)
+            int yTunelPx = plotY + plotH - (int) (((lTunel - yMin) / (yMax - yMin)) * plotH);
+            g2.setColor(new Color(220, 38, 38));
+            g2.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, new float[]{6.0f, 4.0f}, 0.0f));
+            g2.drawLine(plotX, yTunelPx, plotX + plotW, yTunelPx);
+
+            // Etiqueta sutil directamente sobre la línea roja
+            g2.setFont(new Font("Segoe UI", Font.BOLD, 10));
+            g2.drawString(String.format("Límite Túnel (%.0f m)", lTunel), plotX + 8, yTunelPx - 4);
 
             // Curva Teórica s(t)
             g2.setColor(new Color(30, 150, 60));
@@ -326,110 +373,109 @@ public class SimuladorINS extends JFrame {
             g2.drawPolyline(px, pyError, numPuntos);
 
             g2.setClip(clipOriginal);
-
-            // Caja de Leyenda
-            String[] lineas = {
-                    "Trayectoria Teórica s(t)",
-                    String.format("Con Deriva (da = %.1f m/s²)", errorAccel)
-            };
-            Color[] colores = { new Color(30, 150, 60), new Color(155, 40, 160) };
-            boolean[] punteadas = { false, true };
-            dibujarCajaLeyenda(g2, plotX + 15, plotY + 8, 215, lineas, colores, punteadas);
         }
 
         private void dibujarMarcoYCuadricula(Graphics2D g2, int x, int y, int w, int h,
-                                             String titulo, String labelY, double yMin, double yMax, double tMax) {
-            // Fondo del área de datos
+                                             String unidadY, double yMin, double yMax, double tMax) {
             g2.setColor(Color.WHITE);
             g2.fillRect(x, y, w, h);
 
-            // Cuadrícula y valores del Eje Y (5 divisiones)
             g2.setFont(new Font("Segoe UI", Font.PLAIN, 11));
             FontMetrics fm = g2.getFontMetrics();
 
+            // Eje Y y cuadrícula horizontal (4 intervalos / 5 líneas)
             for (int i = 0; i <= 4; i++) {
                 int gy = y + h - (h * i) / 4;
                 double valY = yMin + ((yMax - yMin) * i) / 4.0;
-                String strY = String.format("%.1f", valY);
+                String strY = String.format("%.0f", valY);
 
-                // Líneas de cuadrícula horizontales
                 g2.setColor(new Color(230, 235, 243));
                 g2.setStroke(new BasicStroke(1.0f));
                 g2.drawLine(x, gy, x + w, gy);
 
-                // Etiquetas fuera del recuadro
                 g2.setColor(new Color(90, 100, 115));
                 int strW = fm.stringWidth(strY);
                 g2.drawString(strY, x - strW - 8, gy + 4);
 
-                // Ticks
                 g2.setColor(new Color(170, 180, 195));
                 g2.drawLine(x - 4, gy, x, gy);
             }
 
-            // Cuadrícula y valores del Eje X (5 divisiones de tiempo)
+            // Eje X y cuadrícula vertical
             for (int i = 0; i <= 5; i++) {
                 int gx = x + (w * i) / 5;
                 double valT = (tMax * i) / 5.0;
                 String strT = String.format("%.1fs", valT);
 
-                // Líneas de cuadrícula verticales
                 g2.setColor(new Color(230, 235, 243));
                 g2.drawLine(gx, y, gx, y + h);
 
-                // Etiquetas fuera del recuadro
                 g2.setColor(new Color(90, 100, 115));
                 int strW = fm.stringWidth(strT);
                 g2.drawString(strT, gx - (strW / 2), y + h + 18);
 
-                // Ticks
                 g2.setColor(new Color(170, 180, 195));
                 g2.drawLine(gx, y + h, gx, y + h + 4);
             }
 
-            // Borde exterior del gráfico
+            // Marco del gráfico
             g2.setColor(new Color(180, 190, 205));
             g2.setStroke(new BasicStroke(1.2f));
             g2.drawRect(x, y, w, h);
 
-            // Título de la gráfica
-            g2.setColor(new Color(30, 40, 55));
-            g2.setFont(new Font("Segoe UI", Font.BOLD, 12));
-            g2.drawString(titulo, x, y - 10);
-
-            // Nombre del eje Y
-            g2.setColor(new Color(70, 80, 95));
+            // Indicador de unidad del Eje Y arriba a la izquierda
+            g2.setColor(new Color(110, 120, 135));
             g2.setFont(new Font("Segoe UI", Font.PLAIN, 10));
-            g2.drawString(labelY, x + 5, y - 10 + 22);
+            g2.drawString("[" + unidadY + "]", x - 35, y - 6);
         }
 
-        private void dibujarCajaLeyenda(Graphics2D g2, int lx, int ly, int lw, String[] lineas, Color[] colores, boolean[] punteadas) {
-            int lh = lineas.length * 20 + 8;
-
-            // Fondo semitransparente con sombra suave
-            g2.setColor(new Color(255, 255, 255, 230));
-            g2.fillRoundRect(lx, ly, lw, lh, 6, 6);
-            g2.setColor(new Color(210, 215, 225));
-            g2.setStroke(new BasicStroke(1.0f));
-            g2.drawRoundRect(lx, ly, lw, lh, 6, 6);
-
+        private void dibujarLeyendaHorizontal(Graphics2D g2, int rightX, int topY,
+                                              String[] lineas, Color[] colores, boolean[] punteadas) {
             g2.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+            FontMetrics fm = g2.getFontMetrics();
+
+            int paddingH = 10;
+            int itemSpacing = 14;
+            int sampleW = 18;
+            int sampleGap = 6;
+
+            int totalW = paddingH * 2;
+            int[] itemW = new int[lineas.length];
+            for (int i = 0; i < lineas.length; i++) {
+                itemW[i] = sampleW + sampleGap + fm.stringWidth(lineas[i]);
+                totalW += itemW[i];
+                if (i > 0) totalW += itemSpacing;
+            }
+
+            int boxH = 24;
+            int boxX = rightX - totalW;
+            int boxY = topY;
+
+            // Caja con esquinas redondeadas
+            g2.setColor(new Color(255, 255, 255, 240));
+            g2.fillRoundRect(boxX, boxY, totalW, boxH, 6, 6);
+            g2.setColor(new Color(205, 215, 225));
+            g2.setStroke(new BasicStroke(1.0f));
+            g2.drawRoundRect(boxX, boxY, totalW, boxH, 6, 6);
+
+            // Muestras y textos
+            int curX = boxX + paddingH;
+            int textY = boxY + 16;
+            int sampleY = boxY + 12;
 
             for (int i = 0; i < lineas.length; i++) {
-                int itemY = ly + 16 + (i * 20);
-
-                // Trazo o muestra del color
                 g2.setColor(colores[i]);
                 if (punteadas[i]) {
-                    g2.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, new float[]{4.0f, 3.0f}, 0.0f));
+                    g2.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, new float[]{5.0f, 4.0f}, 0.0f));
                 } else {
                     g2.setStroke(new BasicStroke(2.2f));
                 }
-                g2.drawLine(lx + 10, itemY - 4, lx + 30, itemY - 4);
+                g2.drawLine(curX, sampleY, curX + sampleW, sampleY);
 
-                // Texto descriptivo
                 g2.setColor(new Color(40, 45, 55));
-                g2.drawString(lineas[i], lx + 36, itemY);
+                g2.drawString(lineas[i], curX + sampleW + sampleGap, textY);
+
+                curX += itemW[i] + itemSpacing;
             }
         }
     }
